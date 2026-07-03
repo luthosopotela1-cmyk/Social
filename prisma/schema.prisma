@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  AGENT
+  SUPERVISOR
+  MANAGER
+  ADMIN
+}
+
+enum ChannelType {
+  FACEBOOK_MESSENGER
+  FACEBOOK_COMMENTS
+  INSTAGRAM_DM
+  INSTAGRAM_COMMENTS
+  TWITTER
+  WHATSAPP
+  TIKTOK
+  LINKEDIN
+  YOUTUBE
+  TELEGRAM
+  EMAIL
+  SMS
+  LIVE_CHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  ASSIGNED
+  WAITING_ON_CUSTOMER
+  ESCALATED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  SENDING
+  SENT
+  FAILED
+  RECEIVED
+}
+
+enum AiJobType {
+  CLASSIFY
+  SUMMARIZE
+  COMPLETE
+  TAG
+}
+
+enum NotificationChannel {
+  SOCKET
+  EMAIL
+  PUSH
+  WEBHOOK
+}
+
+model Workspace {
+  id                 String             @id @default(cuid())
+  name               String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  channels           Channel[]
+  users              User[]
+  conversations      Conversation[]
+  customers          CustomerIdentity[]
+  policies           Policy[]
+  auditLogs          AuditLog[]
+  aiInvocations      AiInvocation[]
+  settings           WorkspaceSetting?
+}
+
+model Channel {
+  id               String      @id @default(cuid())
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id])
+  workspaceId      String
+  type             ChannelType
+  name             String
+  enabled          Boolean     @default(true)
+  credentialJson   Json
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model User {
+  id            String      @id @default(cuid())
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id])
+  workspaceId   String
+  email         String      @unique
+  name          String
+  role          Role        @default(AGENT)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  auditLogs     AuditLog[]
+  assignedTo    Conversation[] @relation("AssignedToConversations")
+}
+
+model CustomerIdentity {
+  id                   String                  @id @default(cuid())
+  workspace            Workspace               @relation(fields: [workspaceId], references: [id])
+  workspaceId          String
+  name                 String?
+  email                String?
+  phone                String?
+  mergedFrom           String?
+  channelProfiles      CustomerChannelProfile[]
+  conversations        Conversation[]
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+}
+
+model CustomerChannelProfile {
+  id              String            @id @default(cuid())
+  customer        CustomerIdentity  @relation(fields: [customerId], references: [id])
+  customerId      String
+  channelType     ChannelType
+  providerId      String
+  displayName     String?
+  profileUrl      String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  @@unique([channelType, providerId])
+}
+
+model Conversation {
+  id                   String             @id @default(cuid())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id])
+  workspaceId          String
+  customer             CustomerIdentity   @relation(fields: [customerId], references: [id])
+  customerId           String
+  status               ConversationStatus @default(OPEN)
+  subject              String?
+  assignedToId         String?
+  assignedTo           User?              @relation("AssignedToConversations", fields: [assignedToId], references: [id])
+  messages             Message[]
+  tickets              Ticket[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model Message {
+  id                   String            @id @default(cuid())
+  conversation         Conversation      @relation(fields: [conversationId], references: [id])
+  conversationId       String
+  direction            MessageDirection
+  status               MessageStatus
+  channelType          ChannelType
+  providerMessageId    String?
+  body                 String?
+  attachments          Json?
+  sentAt               DateTime?
+  receivedAt           DateTime?
+  aiSentiment          String?
+  aiIntent             String?
+  aiTags               Json?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+model Ticket {
+  id                   String             @id @default(cuid())
+  conversation         Conversation       @relation(fields: [conversationId], references: [id])
+  conversationId       String
+  subject              String?
+  priority             String?
+  status               String             @default("open")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model Policy {
+  id                   String             @id @default(cuid())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id])
+  workspaceId          String
+  key                  String
+  value                Json
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model WorkspaceSetting {
+  id                   String             @id @default(cuid())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id])
+  workspaceId          String             @unique
+  aiProvider           String?            
+  dataRetentionDays    Int?               @default(365)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model AuditLog {
+  id                   String             @id @default(cuid())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id])
+  workspaceId          String
+  user                User?              @relation(fields: [userId], references: [id])
+  userId              String?
+  action               String
+  resourceType         String
+  resourceId           String?
+  metadata             Json?
+  createdAt            DateTime           @default(now())
+}
+
+model AiInvocation {
+  id                   String             @id @default(cuid())
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id])
+  workspaceId          String
+  type                 AiJobType
+  provider             String
+  prompt               String
+  tokens               Int
+  latencyMs            Int
+  result               Json?
+  createdAt            DateTime           @default(now())
+}
